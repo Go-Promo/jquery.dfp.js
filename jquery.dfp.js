@@ -53,6 +53,9 @@
         // Store adunit on div as:
         storeAs = 'googleAdUnit',
 
+        // Keep track of if sendAdserverRequest() was already called
+        adserverRequestSent = false,
+
         /**
          * Init function sets required params and loads Google's DFP script
          * @param  String id       The DFP account ID
@@ -111,7 +114,9 @@
                 setCentering: false,
                 noFetch: false,
                 namespace: undefined,
-                sizeMapping: {}
+                sizeMapping: {},
+                prebidMapping: {},
+                prebidTimeout: 1000,
             };
 
             if (typeof options.setUrlTargeting === 'undefined' || options.setUrlTargeting) {
@@ -137,6 +142,14 @@
             return dfpOptions;
         },
 
+        getPrebidAdUnit = function(dfpOptions, adUnitName, adUnitID, dimensions) {
+          return dfpOptions.prebidMapping && Array.isArray(dfpOptions.prebidMapping[adUnitName]) ? {
+            code: adUnitID,
+            sizes: dimensions,
+            bids: dfpOptions.prebidMapping[adUnitName]
+          } : undefined;
+        },
+
         /**
          * Find and create all Ads
          * @param Object dfpOptions options related to ad instantiation
@@ -145,6 +158,46 @@
          */
         createAds = function (dfpOptions, $adCollection) {
             var googletag = window.googletag;
+
+            var prebidAdUnits = [];
+
+            // Loops through on page Ad units and gets ads for them.
+            $adCollection.each(function () {
+                var $adUnit = $(this);
+
+                // adUnit name
+                var adUnitName = getName($adUnit, dfpOptions);
+
+                // adUnit id - this will use an existing id or an auto generated one.
+                var adUnitID = getID($adUnit, adUnitName);
+
+                // get dimensions of the adUnit
+                var dimensions = getDimensions($adUnit);
+
+                var prebidAdUnit = getPrebidAdUnit(dfpOptions, adUnitName, adUnitID, dimensions);
+
+                if (prebidAdUnit) {
+                  $adUnit.data('prebid', true);
+                  prebidAdUnits.push(prebidAdUnit);
+                }
+            });
+
+            if (prebidAdUnits.length) {
+                var $prebidAdCollection = $adCollection.filter(function() {
+                    return $(this).data('prebid');
+                });
+                var callback = sendAdserverRequest.bind(null, prebidAdUnits, $prebidAdCollection);
+
+                setTimeout(callback, dfpOptions.prebidTimeout);
+
+                pbjs.que.push(function() {
+                    pbjs.addAdUnits(prebidAdUnits);
+                    pbjs.requestBids({
+                        bidsBackHandler: callback
+                    });
+                });
+            }
+
             // Loops through on page Ad units and gets ads for them.
             $adCollection.each(function () {
                 var $adUnit = $(this);
@@ -379,6 +432,20 @@
 
         },
 
+        sendAdserverRequest = function (prebidAdUnits, $prebidAdCollection) {
+            if (adserverRequestSent) return;
+
+            adserverRequestSent = true;
+            var $ads = getAdCollectionAds($prebidAdCollection);
+
+            googletag.cmd.push(function() {
+                pbjs.que.push(function() {
+                    pbjs.setTargetingForGPTAsync(prebidAdUnits);
+                    googletag.pubads().refresh($ads);
+                });
+            });
+        },
+
         /**
          * Display all created Ads
          * @param {Object} dfpOptions options related to ad instantiation
@@ -428,15 +495,23 @@
             });
 
             if (dfpOptions.disableInitialLoad) {
-                var $ads = $adCollection.filter('.display-none').map(function () {
-                    return $(this).data(storeAs);
-                }).get();
+                var $notPrebidAdCollection = $adCollection.filter(function() {
+                    return !$(this).data('prebid');
+                });
+
+                var $ads = getAdCollectionAds($notPrebidAdCollection);
 
                 googletag.cmd.push(function () {
                     googletag.pubads().refresh($ads);
                 });
             }
 
+        },
+
+        getAdCollectionAds = function($adCollection) {
+          return $adCollection.filter('.display-none').map(function () {
+              return $(this).data(storeAs);
+          }).get();
         },
 
         /**
@@ -538,6 +613,9 @@
          * @param {Array} $adCollection
          */
         dfpLoader = function (options, $adCollection) {
+          window.pbjs = window.pbjs || {};
+          window.pbjs.que = window.pbjs.que || [];
+
           window.googletag = window.googletag || {};
           window.googletag.cmd = window.googletag.cmd || [];
 
