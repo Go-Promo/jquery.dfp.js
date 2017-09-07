@@ -50,11 +50,11 @@
         // Keep track of if we've already tried to load gpt.js before
         dfpIsLoaded = false,
 
+        // Keep track of if sendAdserverRequest() was already called
+        pbjsAdserverRequestSent = false,
+
         // Store adunit on div as:
         storeAs = 'googleAdUnit',
-
-        // Keep track of if sendAdserverRequest() was already called
-        adserverRequestSent = false,
 
         /**
          * Init function sets required params and loads Google's DFP script
@@ -68,6 +68,8 @@
             // Reset counters on each call
             count = 0;
             rendered = 0;
+
+            pbjsAdserverRequestSent = false,
 
             dfpID = id;
             $adCollection = $(selector);
@@ -117,6 +119,7 @@
                 sizeMapping: {},
                 prebidMapping: {},
                 prebidTimeout: 1000,
+                prebidConfig: {},
             };
 
             if (typeof options.setUrlTargeting === 'undefined' || options.setUrlTargeting) {
@@ -186,11 +189,12 @@
                 var $prebidAdCollection = $adCollection.filter(function() {
                     return $(this).data('prebid');
                 });
-                var callback = sendAdserverRequest.bind(null, prebidAdUnits, $prebidAdCollection);
+                var callback = sendAdServerRequest.bind(null, prebidAdUnits, $prebidAdCollection);
 
                 setTimeout(callback, dfpOptions.prebidTimeout);
 
                 pbjs.que.push(function() {
+                    pbjs.setConfig(dfpOptions.prebidConfig);
                     pbjs.addAdUnits(prebidAdUnits);
                     pbjs.requestBids({
                         bidsBackHandler: callback
@@ -432,15 +436,19 @@
 
         },
 
-        sendAdserverRequest = function (prebidAdUnits, $prebidAdCollection) {
-            if (adserverRequestSent) return;
+        sendAdServerRequest = function (prebidAdUnits, $prebidAdCollection) {
+            if (pbjsAdserverRequestSent) return;
 
-            adserverRequestSent = true;
+            pbjsAdserverRequestSent = true;
             var $ads = getAdCollectionAds($prebidAdCollection);
+
+            var adUnitCodes = $.map(prebidAdUnits, function(unit) {
+              return unit.code;
+            });
 
             googletag.cmd.push(function() {
                 pbjs.que.push(function() {
-                    pbjs.setTargetingForGPTAsync(prebidAdUnits);
+                    pbjs.setTargetingForGPTAsync(adUnitCodes);
                     googletag.pubads().refresh($ads);
                 });
             });
