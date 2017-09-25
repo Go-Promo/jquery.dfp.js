@@ -50,9 +50,6 @@
         // Keep track of if we've already tried to load gpt.js before
         dfpIsLoaded = false,
 
-        // Keep track of if sendAdserverRequest() was already called
-        pbjsAdserverRequestSent = false,
-
         // Store adunit on div as:
         storeAs = 'googleAdUnit',
 
@@ -68,8 +65,6 @@
             // Reset counters on each call
             count = 0;
             rendered = 0;
-
-            pbjsAdserverRequestSent = false,
 
             dfpID = id;
             $adCollection = $(selector);
@@ -186,10 +181,15 @@
             });
 
             if (prebidAdUnits.length) {
+                var scope = {
+                    // keep track of if sendAdserverRequest() was already called
+                    pbjsAdserverRequestSent: false,
+                };
+
                 var $prebidAdCollection = $adCollection.filter(function() {
                     return $(this).data('prebid');
                 });
-                var callback = sendAdServerRequest.bind(null, prebidAdUnits, $prebidAdCollection);
+                var callback = sendAdServerRequest.bind(scope, prebidAdUnits, $prebidAdCollection);
 
                 setTimeout(callback, dfpOptions.prebidTimeout);
 
@@ -437,9 +437,9 @@
         },
 
         sendAdServerRequest = function (prebidAdUnits, $prebidAdCollection) {
-            if (pbjsAdserverRequestSent) return;
+            if (this.pbjsAdserverRequestSent) return;
 
-            pbjsAdserverRequestSent = true;
+            this.pbjsAdserverRequestSent = true;
             var $ads = getAdCollectionAds($prebidAdCollection);
 
             var adUnitCodes = $.map(prebidAdUnits, function(unit) {
