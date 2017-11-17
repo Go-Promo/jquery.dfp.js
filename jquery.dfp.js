@@ -181,23 +181,21 @@
             });
 
             if (prebidAdUnits.length) {
-                var scope = {
-                    // keep track of if sendAdserverRequest() was already called
-                    pbjsAdserverRequestSent: false,
-                };
-
                 var $prebidAdCollection = $adCollection.filter(function() {
                     return $(this).data('prebid');
                 });
-                var callback = sendAdServerRequest.bind(scope, prebidAdUnits, $prebidAdCollection);
+                var callback = sendAdServerRequest.bind({
+                    // keep track of if sendAdserverRequest() was already called
+                    pbjsAdserverRequestSent: false,
+                }, prebidAdUnits, $prebidAdCollection);
 
                 setTimeout(callback, dfpOptions.prebidTimeout);
 
                 pbjs.que.push(function() {
                     pbjs.setConfig(dfpOptions.prebidConfig);
-                    pbjs.addAdUnits(prebidAdUnits);
                     pbjs.requestBids({
-                        bidsBackHandler: callback
+                        bidsBackHandler: callback,
+                        adUnits: prebidAdUnits
                     });
                 });
             }
